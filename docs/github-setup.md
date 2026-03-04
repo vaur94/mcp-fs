@@ -44,10 +44,12 @@ Prefer matrix checks that represent all target platforms.
 
 ## 6) Recommended merge policy
 - Squash merge enabled
-- Auto-merge only when required checks and review requirements are satisfied
+- Auto-merge enabled at repository level
+- Bot PR auto-merge is handled by `.github/workflows/auto-merge-bots.yml`
 - No direct pushes to `main`
 
 ## 7) Release automation notes
 - `Release Please` workflow runs on `main` pushes and opens/updates release PRs.
-- Merging a release PR creates a `v*` tag and updates `CHANGELOG.md`.
-- Tag push triggers `.github/workflows/release.yml`, which publishes binaries and `SHA256SUMS`.
+- Merging a release PR creates a release/tag and updates `CHANGELOG.md`.
+- The same workflow now builds and uploads release binaries plus `SHA256SUMS` automatically.
+- `.github/workflows/release.yml` remains as fallback/manual tag pipeline.

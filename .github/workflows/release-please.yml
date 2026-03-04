@@ -5,9 +5,7 @@ on:
     branches:
       - main
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: read-all
 
 concurrency:
   group: release-please-${{ github.ref }}
@@ -16,9 +14,108 @@ concurrency:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - name: Release Please
+        id: release
         uses: googleapis/release-please-action@v4
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  build-assets:
+    name: Publish ${{ matrix.rid }}
+    runs-on: ubuntu-latest
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            archive: tar.gz
+          - rid: linux-arm64
+            archive: tar.gz
+          - rid: win-x64
+            archive: zip
+          - rid: osx-x64
+            archive: tar.gz
+          - rid: osx-arm64
+            archive: tar.gz
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.x
+
+      - name: Publish self-contained single-file
+        run: |
+          mkdir -p artifacts/${{ matrix.rid }}
+          dotnet publish src/McpFs/McpFs.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            -p:PublishSingleFile=true \
+            -p:SelfContained=true \
+            -p:PublishTrimmed=false \
+            -o artifacts/${{ matrix.rid }}
+
+      - name: Archive (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          mkdir -p dist
+          tar -C artifacts -czf dist/mcp-fs-${{ matrix.rid }}.tar.gz ${{ matrix.rid }}
+
+      - name: Archive (zip)
+        if: matrix.archive == 'zip'
+        run: |
+          mkdir -p dist
+          (cd artifacts && zip -r ../dist/mcp-fs-${{ matrix.rid }}.zip ${{ matrix.rid }})
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcp-fs-${{ matrix.rid }}
+          path: dist/*
+
+  publish-release:
+    name: Publish Release Assets
+    runs-on: ubuntu-latest
+    needs: [release-please, build-assets]
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find dist -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} release/ \;
+          cp samples/mcp-fs.config.json.sample release/
+          cp samples/workers/mcp-fs.worker.json release/
+          (cd release && sha256sum * > SHA256SUMS)
+
+      - name: Attach assets to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: |
+            release/*.tar.gz
+            release/*.zip
+            release/SHA256SUMS
+            release/mcp-fs.config.json.sample
+            release/mcp-fs.worker.json
