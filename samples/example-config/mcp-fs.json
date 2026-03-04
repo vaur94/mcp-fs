@@ -1,0 +1,11 @@
+{
+  "workspaceRoot": "./samples/example-workspace",
+  "followSymlinks": false,
+  "searchMaxResults": 100,
+  "searchSnippetBytes": 220,
+  "openMaxBytes": 65536,
+  "openMaxLines": 200,
+  "scanLimit": 500,
+  "scanMaxDepth": 8,
+  "logLevel": "info"
+}

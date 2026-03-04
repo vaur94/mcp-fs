@@ -1,0 +1,23 @@
+# Build outputs
+bin/
+obj/
+
+# User files
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test outputs
+TestResults/
+*.trx
+coverage/
+
+# Release artifacts
+artifacts/
+SHA256SUMS

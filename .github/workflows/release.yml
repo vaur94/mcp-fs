@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Publish ${{ matrix.rid }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [linux-x64, win-x64, osx-x64, osx-arm64]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+
+      - name: Publish self-contained single-file
+        run: |
+          mkdir -p artifacts/${{ matrix.rid }}
+          dotnet publish src/McpFs/McpFs.csproj \
+            -c Release \
+            -r ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:DebugType=None \
+            -p:DebugSymbols=false \
+            -o artifacts/${{ matrix.rid }}
+
+      - name: Create archive
+        run: |
+          cd artifacts
+          tar -czf mcp-fs-${{ matrix.rid }}.tar.gz ${{ matrix.rid }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-fs-${{ matrix.rid }}
+          path: artifacts/mcp-fs-${{ matrix.rid }}.tar.gz
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Prepare files
+        run: |
+          mkdir -p release
+          find dist -type f -name '*.tar.gz' -exec cp {} release/ \;
+          cd release
+          sha256sum *.tar.gz > SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.tar.gz
+            release/SHA256SUMS
+          generate_release_notes: true
