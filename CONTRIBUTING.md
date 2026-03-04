@@ -11,7 +11,7 @@ dotnet restore
 dotnet build -c Release
 dotnet test -c Release
 dotnet format mcp-fs.sln --verify-no-changes
-rg -n "TECH_DEBT_MARKER" .
+rg -n "TO[D]O|FI[X]ME|HA[C]K" . --glob '!docs/answer.md'
 ```
 
 ## Branch and PR flow
@@ -27,16 +27,32 @@ rg -n "TECH_DEBT_MARKER" .
 - Avoid unbounded output and context-heavy responses.
 - Prefer minimal allocations in hot paths.
 
-## Commit style
-Use clear, imperative messages. Example:
-- `Implement strict hash-guarded patch pipeline`
-- `Add fallback search line/column tests`
+## Commit style (Conventional Commits)
+Use Conventional Commits so release-please can automate versioning and changelog generation.
+
+Format:
+- `<type>(<scope>): <subject>`
+- Scope is optional.
+
+Allowed core types:
+- `feat`
+- `fix`
+- `docs`
+- `chore`
+- `ci`
+- `refactor`
+- `test`
+
+Examples:
+- `feat(search): add ripgrep timeout hardening`
+- `fix(path): reject windows-style traversal`
+- `docs(install): add checksum-first setup guide`
 
 ## Pull request checklist
 - [ ] `dotnet build -c Release` passes
 - [ ] `dotnet test -c Release` passes
 - [ ] `dotnet format mcp-fs.sln --verify-no-changes` passes
-- [ ] `rg -n "TECH_DEBT_MARKER" .` returns empty
+- [ ] `rg -n "TO[D]O|FI[X]ME|HA[C]K" . --glob '!docs/answer.md'` returns empty
 - [ ] docs updated (`README`, `docs/*`) when needed
 - [ ] changelog updated
 - [ ] no unresolved debt markers in production code

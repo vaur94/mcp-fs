@@ -14,6 +14,13 @@ Binary:
 ./mcp-fs --config ./mcp-fs.config.json
 ```
 
+One-command install (release binary + SHA256 verification):
+```bash
+curl -fsSL https://raw.githubusercontent.com/vaur94/mcp-fs/main/install.sh | bash
+```
+
+See full guide: [docs/install.md](./install.md)
+
 ## CLI arguments
 - `--root <path>`: force workspace root
 - `--config <path>`: config file path

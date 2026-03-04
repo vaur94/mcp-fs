@@ -44,6 +44,10 @@ dotnet run --project src/McpFs/McpFs.csproj -c Release -- --config ./mcp-fs.conf
 - Usage: [docs/usage.md](docs/usage.md)
 - Security model: [docs/security.md](docs/security.md)
 - Troubleshooting: [docs/troubleshooting.md](docs/troubleshooting.md)
+- Install guide (EN/TR): [docs/install.md](docs/install.md)
+- GitHub setup checklist: [docs/github-setup.md](docs/github-setup.md)
+- Release notes: [CHANGELOG.md](CHANGELOG.md)
+- GitHub Releases: [releases](https://github.com/vaur94/mcp-fs/releases)
 
 ### Build and test
 ```bash
@@ -98,6 +102,10 @@ dotnet run --project src/McpFs/McpFs.csproj -c Release -- --config ./mcp-fs.conf
 - Protokol (normatif): [docs/protocol.md](docs/protocol.md)
 - Kullanım: [docs/usage.md](docs/usage.md)
 - Güvenlik modeli: [docs/security.md](docs/security.md)
+- Kurulum rehberi (EN/TR): [docs/install.md](docs/install.md)
+- GitHub kurulum checklist: [docs/github-setup.md](docs/github-setup.md)
+- Sürüm notları: [CHANGELOG.md](CHANGELOG.md)
+- GitHub Release sayfası: [releases](https://github.com/vaur94/mcp-fs/releases)
 
 ### Lisans
 MIT ([LICENSE](LICENSE)).

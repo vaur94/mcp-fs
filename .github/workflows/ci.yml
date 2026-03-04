@@ -4,6 +4,12 @@ on:
   push:
   pull_request:
 
+permissions: read-all
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test-format:
     name: Build/Test/Format (${{ matrix.os }})
@@ -35,11 +41,11 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: dotnet format mcp-fs.sln --verify-no-changes
 
-      - name: Check TODO/FIXME/HACK (ubuntu)
+      - name: Check debt markers (ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          if rg -n "TODO|FIXME|HACK" --glob '!docs/answer.md' .; then
-            echo "Found TODO/FIXME/HACK markers"
+          if rg -n "TO[D]O|FI[X]ME|HA[C]K" --glob '!docs/answer.md' .; then
+            echo "Found debt markers"
             exit 1
           fi
 
