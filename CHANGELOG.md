@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/vaur94/mcp-fs/compare/v1.0.0...v1.1.0) (2026-03-04)
+
+
+### Features
+
+* initial mcp-fs v0.1.0 ([a07dec0](https://github.com/vaur94/mcp-fs/commit/a07dec0eee6fc04d6d558fce79f1d53aaf4e10e0))
+
 ## [Unreleased]
 
 ## [1.0.0] - 2026-03-04
