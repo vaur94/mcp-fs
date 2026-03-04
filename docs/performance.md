@@ -1,37 +1,35 @@
 # Performance Notes
 
-## Why limits exist
-`mcp-fs` is optimized for agent workflows where context is scarce and expensive.
+`mcp-fs` is optimized for bounded outputs and predictable latency.
 
-Default limits:
-- `fs.search.maxResults`: `100`
-- `fs.search.snippetBytes`: `220`
-- `fs.open.maxBytes`: `65536` (64KB)
-- `fs.scan.limit`: `500`
+## Default limits
+- `fs.search.maxResults = 100`
+- `fs.search.snippetBytes = 220`
+- `fs.search.maxFilesScanned = 5000`
+- `fs.search.maxFileSizeBytes = 2097152`
+- `fs.search.timeoutMs = 5000`
+- `fs.open.maxBytes = 65536`
+- `fs.open.maxLines = 200`
+- `fs.scan.limit = 500`
+- `fs.scan.maxDepth = 16`
 
-These defaults reduce noisy payloads and keep round-trip latency predictable.
+## Hard caps
+Hard caps are enforced even if config is higher:
+- `search.maxResults <= 500`
+- `search.snippetBytes <= 2000`
+- `search.timeoutMs <= 15000`
+- `open.maxBytes <= 131072`
+- `open.maxLines <= 1000`
+- `scan.limit <= 5000`
+- `scan.maxDepth <= 64`
 
-## ripgrep advantage
-When available, `rg` is used for `fs.search` because it:
-- Scans large trees faster than managed fallback.
-- Supports robust regex/literal modes.
-- Returns line-oriented match events suitable for snippet extraction.
+## Search engine behavior
+- Preferred engine: `rg` (`ripgrep`).
+- Fallback engine: streaming line-by-line search.
+- Binary heuristic: null-byte detection for fallback skip.
+- Both engines support truncation via caps and timeouts.
 
-If `rg` is absent, `mcp-fs` falls back automatically to streaming search.
-
-## Binary file behavior
-Fallback search skips likely binary files by probing early bytes for null-byte markers. This avoids expensive scans and prevents unreadable snippets.
-
-## Ignore strategy
-Performance and relevance improve with ignore rules:
-- Built-in ignores: `.git`, `bin`, `obj`, `node_modules`, `dist`, `.idea`, `.vs`
-- `.gitignore` support at workspace root
-- Optional include/exclude globs per request
-
-In large monorepos, excluding `node_modules` and generated output is critical.
-
-## Early stop behavior
-- `fs.scan`: stops once `limit` is reached and marks `truncated=true`.
-- `fs.search`: stops at `maxResults`, marks `truncated=true`, and avoids full output floods.
-
-This is a hard requirement for predictable latency and bounded token usage.
+## Context minimal principle
+- `fs.search` returns snippets, ranges, and hashes.
+- `fs.open` returns only requested line range, bounded by caps.
+- `fs.patchPreview` gives summary instead of full diff dump.

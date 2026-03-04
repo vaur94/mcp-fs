@@ -23,3 +23,4 @@ Include:
 ## Scope notes
 - `mcp-fs` is local-first and offline by design.
 - Security issues around path traversal, root escape, symlink handling, and patch integrity are high priority.
+- The detailed technical model is documented in [docs/security.md](docs/security.md).

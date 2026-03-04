@@ -44,4 +44,28 @@ public sealed class PathPolicyTests
             TestHelpers.DeleteDirectory(root);
         }
     }
+
+    [Theory]
+    [InlineData("C:/Windows/System32")]
+    [InlineData("C:\\Windows\\System32")]
+    [InlineData("\\\\server\\share\\file.txt")]
+    [InlineData("//server/share/file.txt")]
+    public void ResolvePath_WithDriveOrUnc_ShouldReturnInvalidPath(string input)
+    {
+        var root = TestHelpers.CreateTempDirectory();
+        try
+        {
+            var workspace = TestHelpers.CreateWorkspace(root);
+
+            var ok = workspace.PathPolicy.TryResolvePath(input, out _, out _, out var error);
+
+            ok.Should().BeFalse();
+            error.Should().NotBeNull();
+            error!.ErrorCode.Should().Be(ErrorCodes.InvalidPath);
+        }
+        finally
+        {
+            TestHelpers.DeleteDirectory(root);
+        }
+    }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
 using McpFs.Core.Hashing;
@@ -22,32 +23,40 @@ public sealed class FallbackSearcher
         Workspace workspace,
         string searchRoot,
         SearchRequest request,
-        int maxResults,
-        int snippetBytes,
+        SearchRuntimeOptions options,
         CancellationToken cancellationToken)
     {
-        var matches = new List<SearchMatch>(Math.Min(maxResults, 256));
+        var matches = new List<SearchMatch>(Math.Min(options.MaxResults, 256));
         var contextHashCache = new Dictionary<string, string>(StringComparer.Ordinal);
         var truncated = false;
+        var filesScanned = 0;
 
         Regex? regex = null;
         if (request.Regex == true)
         {
-            var options = RegexOptions.Compiled | RegexOptions.CultureInvariant;
+            var regexOptions = RegexOptions.Compiled | RegexOptions.CultureInvariant;
             if (request.CaseSensitive != true)
             {
-                options |= RegexOptions.IgnoreCase;
+                regexOptions |= RegexOptions.IgnoreCase;
             }
 
-            regex = new Regex(request.Query, options);
+            regex = new Regex(request.Query, regexOptions);
         }
 
+        var stopwatch = Stopwatch.StartNew();
         var pending = new Stack<string>();
         pending.Push(searchRoot);
 
         while (pending.Count > 0 && !truncated)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (stopwatch.ElapsedMilliseconds > options.TimeoutMs)
+            {
+                truncated = true;
+                break;
+            }
+
             var currentDir = pending.Pop();
 
             IEnumerable<string> entries;
@@ -64,6 +73,12 @@ public sealed class FallbackSearcher
             foreach (var entry in entries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+
+                if (stopwatch.ElapsedMilliseconds > options.TimeoutMs)
+                {
+                    truncated = true;
+                    break;
+                }
 
                 FileSystemInfo info = Directory.Exists(entry)
                     ? new DirectoryInfo(entry)
@@ -96,6 +111,19 @@ public sealed class FallbackSearcher
                     continue;
                 }
 
+                filesScanned++;
+                if (filesScanned > options.MaxFilesScanned)
+                {
+                    truncated = true;
+                    break;
+                }
+
+                var fileInfo = (FileInfo)info;
+                if (fileInfo.Length > options.MaxFileSizeBytes)
+                {
+                    continue;
+                }
+
                 if (await IsLikelyBinaryAsync(entry, cancellationToken).ConfigureAwait(false))
                 {
                     continue;
@@ -106,12 +134,13 @@ public sealed class FallbackSearcher
                     relativePath,
                     request,
                     regex,
-                    snippetBytes,
+                    options,
+                    stopwatch,
                     contextHashCache,
                     cancellationToken).ConfigureAwait(false))
                 {
                     matches.Add(match);
-                    if (matches.Count >= maxResults)
+                    if (matches.Count >= options.MaxResults)
                     {
                         truncated = true;
                         break;
@@ -138,7 +167,8 @@ public sealed class FallbackSearcher
         string relativePath,
         SearchRequest request,
         Regex? regex,
-        int snippetBytes,
+        SearchRuntimeOptions options,
+        Stopwatch stopwatch,
         Dictionary<string, string> contextHashCache,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -155,6 +185,12 @@ public sealed class FallbackSearcher
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (stopwatch.ElapsedMilliseconds > options.TimeoutMs)
+            {
+                yield break;
+            }
+
             var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line is null)
             {
@@ -173,7 +209,7 @@ public sealed class FallbackSearcher
                     }
 
                     var contextHash = await GetContextHashAsync(filePath, contextHashCache, cancellationToken).ConfigureAwait(false);
-                    yield return BuildMatch(relativePath, lineNo, match.Index, match.Length, line, snippetBytes, contextHash);
+                    yield return BuildMatch(relativePath, lineNo, match.Index, match.Length, line, options.SnippetBytes, contextHash);
                 }
 
                 continue;
@@ -193,7 +229,7 @@ public sealed class FallbackSearcher
                 }
 
                 var contextHash = await GetContextHashAsync(filePath, contextHashCache, cancellationToken).ConfigureAwait(false);
-                yield return BuildMatch(relativePath, lineNo, index, request.Query.Length, line, snippetBytes, contextHash);
+                yield return BuildMatch(relativePath, lineNo, index, request.Query.Length, line, options.SnippetBytes, contextHash);
 
                 start = index + Math.Max(1, request.Query.Length);
             }

@@ -5,8 +5,8 @@ on:
   pull_request:
 
 jobs:
-  build-test:
-    name: Build and Test (${{ matrix.os }})
+  build-test-format:
+    name: Build/Test/Format (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -29,4 +29,23 @@ jobs:
         run: dotnet build mcp-fs.sln -c Release --no-restore
 
       - name: Test
-        run: dotnet test mcp-fs.sln -c Release --no-build --verbosity normal
+        run: dotnet test mcp-fs.sln -c Release --no-build --logger "trx;LogFileName=test-results.trx"
+
+      - name: Verify formatting (ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: dotnet format mcp-fs.sln --verify-no-changes
+
+      - name: Check TODO/FIXME/HACK (ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          if rg -n "TODO|FIXME|HACK" --glob '!docs/answer.md' .; then
+            echo "Found TODO/FIXME/HACK markers"
+            exit 1
+          fi
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: '**/test-results.trx'

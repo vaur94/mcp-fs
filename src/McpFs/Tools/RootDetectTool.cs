@@ -16,8 +16,8 @@ public sealed class RootDetectTool
     {
         var data = new RootDetectData
         {
-            RootPath = _workspace.RootPath,
-            DetectionReason = _workspace.DetectionReason
+            Root = _workspace.RootPath,
+            Reason = _workspace.DetectionReason
         };
 
         return ToolResponse.Success(data, McpJsonSerializerContext.Default.RootDetectData);

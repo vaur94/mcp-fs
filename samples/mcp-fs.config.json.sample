@@ -1,5 +1,5 @@
 {
-  "workspaceRoot": "./samples/example-workspace",
+  "workspaceRoot": "./",
   "followSymlinks": false,
   "searchMaxResults": 100,
   "searchSnippetBytes": 220,
@@ -12,6 +12,6 @@
   "patchMaxEdits": 50,
   "patchMaxFileSizeBytes": 2097152,
   "scanLimit": 500,
-  "scanMaxDepth": 8,
+  "scanMaxDepth": 16,
   "logLevel": "info"
 }

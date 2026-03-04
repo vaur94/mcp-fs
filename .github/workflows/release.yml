@@ -15,7 +15,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rid: [linux-x64, win-x64, osx-x64, osx-arm64]
+        include:
+          - rid: linux-x64
+            archive: tar.gz
+          - rid: linux-arm64
+            archive: tar.gz
+          - rid: win-x64
+            archive: zip
+          - rid: osx-x64
+            archive: tar.gz
+          - rid: osx-arm64
+            archive: tar.gz
 
     steps:
       - name: Checkout
@@ -32,23 +42,28 @@ jobs:
           dotnet publish src/McpFs/McpFs.csproj \
             -c Release \
             -r ${{ matrix.rid }} \
-            --self-contained true \
             -p:PublishSingleFile=true \
-            -p:IncludeNativeLibrariesForSelfExtract=true \
-            -p:DebugType=None \
-            -p:DebugSymbols=false \
+            -p:SelfContained=true \
+            -p:PublishTrimmed=false \
             -o artifacts/${{ matrix.rid }}
 
-      - name: Create archive
+      - name: Archive (tar.gz)
+        if: matrix.archive == 'tar.gz'
         run: |
-          cd artifacts
-          tar -czf mcp-fs-${{ matrix.rid }}.tar.gz ${{ matrix.rid }}
+          mkdir -p dist
+          tar -C artifacts -czf dist/mcp-fs-${{ matrix.rid }}.tar.gz ${{ matrix.rid }}
+
+      - name: Archive (zip)
+        if: matrix.archive == 'zip'
+        run: |
+          mkdir -p dist
+          (cd artifacts && zip -r ../dist/mcp-fs-${{ matrix.rid }}.zip ${{ matrix.rid }})
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mcp-fs-${{ matrix.rid }}
-          path: artifacts/mcp-fs-${{ matrix.rid }}.tar.gz
+          path: dist/*
 
   release:
     name: Create GitHub Release
@@ -56,22 +71,29 @@ jobs:
     needs: build
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
 
-      - name: Prepare files
+      - name: Prepare release assets
         run: |
           mkdir -p release
-          find dist -type f -name '*.tar.gz' -exec cp {} release/ \;
-          cd release
-          sha256sum *.tar.gz > SHA256SUMS
+          find dist -type f \( -name '*.tar.gz' -o -name '*.zip' \) -exec cp {} release/ \;
+          cp samples/mcp-fs.config.json.sample release/
+          cp samples/workers/mcp-fs.worker.json release/
+          (cd release && sha256sum * > SHA256SUMS)
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             release/*.tar.gz
+            release/*.zip
             release/SHA256SUMS
+            release/mcp-fs.config.json.sample
+            release/mcp-fs.worker.json
           generate_release_notes: true

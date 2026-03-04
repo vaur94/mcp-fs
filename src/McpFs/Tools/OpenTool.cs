@@ -1,6 +1,7 @@
 using McpFs.Core;
 using McpFs.Core.Hashing;
 using McpFs.Core.IO;
+using McpFs.Core.Limits;
 using McpFs.Rpc;
 
 namespace McpFs.Tools;
@@ -25,30 +26,43 @@ public sealed class OpenTool
             return ToolResponse.Failure(ErrorCodes.InvalidPath, "path is required");
         }
 
-        if (!_workspace.PathPolicy.TryResolvePath(request.Path, out var fullPath, out var relativePath, out var pathError))
+        if (!_workspace.PathPolicy.TryResolveExistingFile(request.Path, out var fullPath, out var relativePath, out _, out var pathError))
         {
             return pathError!;
         }
 
-        if (!File.Exists(fullPath))
-        {
-            return ToolResponse.Failure(ErrorCodes.NotFound, $"File not found: {request.Path}");
-        }
-
-        var maxBytes = request.MaxBytes ?? _workspace.Config.OpenMaxBytes;
-        if (maxBytes <= 0)
+        if (request.MaxBytes is <= 0)
         {
             return ToolResponse.Failure(ErrorCodes.InvalidRange, "maxBytes must be > 0");
         }
 
+        var maxBytes = Math.Min(
+            request.MaxBytes ?? _workspace.Config.OpenMaxBytes,
+            Math.Min(_workspace.Config.OpenMaxBytes, FsLimits.OpenHardCapBytes));
+
         var startLine = request.StartLine ?? 1;
-        var endLine = request.EndLine ?? (startLine + _workspace.Config.OpenMaxLines - 1);
-        if (startLine <= 0 || endLine <= 0 || endLine < startLine)
+        var requestedEnd = request.EndLine ?? (startLine + _workspace.Config.OpenMaxLines - 1);
+        if (startLine <= 0 || requestedEnd <= 0 || requestedEnd < startLine)
         {
             return ToolResponse.Failure(ErrorCodes.InvalidRange, "Invalid line range.");
         }
 
-        var readResult = await _fileReader.ReadRangeAsync(fullPath, startLine, endLine, maxBytes, cancellationToken).ConfigureAwait(false);
+        var requestedLines = requestedEnd - startLine + 1;
+        var effectiveMaxLines = Math.Min(requestedLines, Math.Min(_workspace.Config.OpenMaxLines, FsLimits.OpenHardCapLines));
+        var effectiveEnd = startLine + effectiveMaxLines - 1;
+        if (effectiveEnd < startLine)
+        {
+            return ToolResponse.Failure(ErrorCodes.InvalidRange, "Invalid line range.");
+        }
+
+        var readResult = await _fileReader.ReadRangeAsync(
+            fullPath,
+            startLine,
+            effectiveEnd,
+            maxBytes,
+            effectiveMaxLines,
+            request.EndLine.HasValue,
+            cancellationToken).ConfigureAwait(false);
         if (!readResult.Ok)
         {
             return ToolResponse.Failure(readResult.ErrorCode ?? ErrorCodes.InternalError, readResult.Message ?? "Read failed");
@@ -61,7 +75,9 @@ public sealed class OpenTool
             StartLine = startLine,
             EndLine = readResult.EndLine,
             Text = readResult.Text ?? string.Empty,
-            ContextHash = contextHash
+            ContextHash = contextHash,
+            FileSize = readResult.FileSize,
+            Truncated = readResult.Truncated || requestedEnd > effectiveEnd
         };
 
         return ToolResponse.Success(data, McpJsonSerializerContext.Default.OpenData);

@@ -10,6 +10,8 @@ Thanks for contributing to `mcp-fs`.
 dotnet restore
 dotnet build -c Release
 dotnet test -c Release
+dotnet format mcp-fs.sln --verify-no-changes
+rg -n "TECH_DEBT_MARKER" .
 ```
 
 ## Branch and PR flow
@@ -33,9 +35,11 @@ Use clear, imperative messages. Example:
 ## Pull request checklist
 - [ ] `dotnet build -c Release` passes
 - [ ] `dotnet test -c Release` passes
+- [ ] `dotnet format mcp-fs.sln --verify-no-changes` passes
+- [ ] `rg -n "TECH_DEBT_MARKER" .` returns empty
 - [ ] docs updated (`README`, `docs/*`) when needed
 - [ ] changelog updated
-- [ ] no TODOs left in production code
+- [ ] no unresolved debt markers in production code
 
 ## PR template
 See [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md).

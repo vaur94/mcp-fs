@@ -61,13 +61,28 @@ public sealed class ToolResponse
         };
     }
 
-    public static ToolResponse Failure(string errorCode, string message)
+    public static ToolResponse Failure(string errorCode, string message, JsonElement? data = null)
     {
         return new ToolResponse
         {
             Ok = false,
             ErrorCode = errorCode,
-            Message = message
+            Message = message,
+            Data = data
+        };
+    }
+
+    public static ToolResponse Failure<T>(string errorCode, string message, T data, JsonTypeInfo<T> typeInfo)
+    {
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(data, typeInfo);
+        using var doc = JsonDocument.Parse(bytes);
+
+        return new ToolResponse
+        {
+            Ok = false,
+            ErrorCode = errorCode,
+            Message = message,
+            Data = doc.RootElement.Clone()
         };
     }
 }
@@ -104,8 +119,8 @@ public sealed class ToolCapability
 
 public sealed class ServerInfo
 {
-    public string Name { get; init; } = "mcp-fs";
-    public string Version { get; init; } = "0.1.0";
+    public string Name { get; init; } = AppMetadata.Name;
+    public string Version { get; init; } = AppMetadata.Version;
 }
 
 public sealed class ToolsListResult
@@ -149,6 +164,10 @@ public sealed class RootDetectRequest
 {
 }
 
+public sealed class HealthRequest
+{
+}
+
 public sealed class ScanRequest
 {
     public string? Root { get; init; }
@@ -168,6 +187,9 @@ public sealed class SearchRequest
     public IReadOnlyList<string>? ExcludeGlob { get; init; }
     public int? MaxResults { get; init; }
     public int? SnippetBytes { get; init; }
+    public int? MaxFilesScanned { get; init; }
+    public int? MaxFileSizeBytes { get; init; }
+    public int? TimeoutMs { get; init; }
 }
 
 public sealed class OpenRequest
@@ -178,11 +200,32 @@ public sealed class OpenRequest
     public int? MaxBytes { get; init; }
 }
 
+public sealed class StatRequest
+{
+    public string Path { get; init; } = string.Empty;
+}
+
+public sealed class ReadDirRequest
+{
+    public string? Path { get; init; }
+    public bool? IncludeFiles { get; init; }
+    public bool? IncludeDirs { get; init; }
+    public int? Limit { get; init; }
+}
+
 public sealed class PatchRequest
 {
     public string Path { get; init; } = string.Empty;
     public string PreHash { get; init; } = string.Empty;
-    public string Mode { get; init; } = "strict";
+    public string? Mode { get; init; }
+    public IReadOnlyList<PatchEdit> Edits { get; init; } = Array.Empty<PatchEdit>();
+}
+
+public sealed class PatchPreviewRequest
+{
+    public string Path { get; init; } = string.Empty;
+    public string PreHash { get; init; } = string.Empty;
+    public string? Mode { get; init; }
     public IReadOnlyList<PatchEdit> Edits { get; init; } = Array.Empty<PatchEdit>();
 }
 
@@ -192,6 +235,13 @@ public sealed class PatchEdit
     public PatchRange? Range { get; init; }
     public PatchPosition? At { get; init; }
     public string? Text { get; init; }
+
+    public int? StartLine { get; init; }
+    public int? StartCol { get; init; }
+    public int? EndLine { get; init; }
+    public int? EndCol { get; init; }
+    public int? Line { get; init; }
+    public int? Col { get; init; }
 }
 
 public sealed class PatchRange
@@ -212,9 +262,33 @@ public sealed class DefaultsData
 {
     public int SearchMaxResults { get; init; }
     public int SearchSnippetBytes { get; init; }
+    public int SearchMaxFilesScanned { get; init; }
+    public int SearchMaxFileSizeBytes { get; init; }
+    public int SearchTimeoutMs { get; init; }
     public int OpenMaxBytes { get; init; }
+    public int OpenMaxLines { get; init; }
+    public int PatchMaxBytes { get; init; }
+    public int PatchMaxEdits { get; init; }
+    public int PatchMaxFileSizeBytes { get; init; }
     public int ScanLimit { get; init; }
+    public int ScanMaxDepth { get; init; }
     public bool FollowSymlinks { get; init; }
+}
+
+public sealed class LimitsData
+{
+    public int OpenHardCapBytes { get; init; }
+    public int OpenHardCapLines { get; init; }
+    public int SearchHardCapResults { get; init; }
+    public int SearchHardCapSnippetBytes { get; init; }
+    public int SearchHardCapFilesScanned { get; init; }
+    public int SearchHardCapFileSizeBytes { get; init; }
+    public int SearchHardCapTimeoutMs { get; init; }
+    public int PatchHardCapBytes { get; init; }
+    public int PatchHardCapEdits { get; init; }
+    public int PatchHardCapFileSizeBytes { get; init; }
+    public int ScanHardCapLimit { get; init; }
+    public int ScanHardCapDepth { get; init; }
 }
 
 public sealed class ToolAvailabilityData
@@ -227,21 +301,23 @@ public sealed class CapabilitiesData
     public string Os { get; init; } = string.Empty;
     public string Arch { get; init; } = string.Empty;
     public string PathSeparator { get; init; } = string.Empty;
-    public string Version { get; init; } = "0.1.0";
+    public string Version { get; init; } = AppMetadata.Version;
     public ToolAvailabilityData ToolAvailability { get; init; } = new();
     public DefaultsData Defaults { get; init; } = new();
+    public LimitsData Limits { get; init; } = new();
+    public IReadOnlyList<string> Features { get; init; } = Array.Empty<string>();
 }
 
 public sealed class RootDetectData
 {
-    public string RootPath { get; init; } = string.Empty;
-    public string DetectionReason { get; init; } = string.Empty;
+    public string Root { get; init; } = string.Empty;
+    public string Reason { get; init; } = string.Empty;
 }
 
 public sealed class ScanData
 {
     public string Root { get; init; } = string.Empty;
-    public IReadOnlyList<ScanItem> Items { get; init; } = Array.Empty<ScanItem>();
+    public IReadOnlyList<ScanItem> Entries { get; init; } = Array.Empty<ScanItem>();
     public bool Truncated { get; init; }
 }
 
@@ -256,7 +332,7 @@ public sealed class ScanItem
 
 public sealed class SearchData
 {
-    public IReadOnlyList<SearchMatch> Matches { get; init; } = Array.Empty<SearchMatch>();
+    public IReadOnlyList<SearchMatch> Results { get; init; } = Array.Empty<SearchMatch>();
     public bool Truncated { get; init; }
     public string Engine { get; init; } = string.Empty;
 }
@@ -286,6 +362,8 @@ public sealed class OpenData
     public int EndLine { get; init; }
     public string Text { get; init; } = string.Empty;
     public string ContextHash { get; init; } = string.Empty;
+    public long FileSize { get; init; }
+    public bool Truncated { get; init; }
 }
 
 public sealed class RejectedEdit
@@ -298,8 +376,65 @@ public sealed class PatchData
 {
     public string PostHash { get; init; } = string.Empty;
     public int AppliedEditsCount { get; init; }
+    public int BytesChanged { get; init; }
+    public int LineDelta { get; init; }
     public IReadOnlyList<RejectedEdit>? RejectedEdits { get; init; }
     public string? Summary { get; init; }
+}
+
+public sealed class PatchPreviewData
+{
+    public bool WouldApply { get; init; }
+    public string PostHash { get; init; } = string.Empty;
+    public DiffSummaryData DiffSummary { get; init; } = new();
+    public int BytesChanged { get; init; }
+    public int LineDelta { get; init; }
+}
+
+public sealed class DiffSummaryData
+{
+    public string Path { get; init; } = string.Empty;
+    public int EditCount { get; init; }
+    public int BytesChanged { get; init; }
+    public int LineDelta { get; init; }
+    public IReadOnlyList<string> EditSummaries { get; init; } = Array.Empty<string>();
+}
+
+public sealed class StatData
+{
+    public string Path { get; init; } = string.Empty;
+    public string Kind { get; init; } = string.Empty;
+    public long? Size { get; init; }
+    public DateTimeOffset? MtimeUtc { get; init; }
+    public string? ContextHash { get; init; }
+    public string? QuickHash8 { get; init; }
+    public bool IsSymlink { get; init; }
+}
+
+public sealed class ReadDirData
+{
+    public IReadOnlyList<ReadDirEntry> Entries { get; init; } = Array.Empty<ReadDirEntry>();
+    public bool Truncated { get; init; }
+}
+
+public sealed class ReadDirEntry
+{
+    public string Name { get; init; } = string.Empty;
+    public string Path { get; init; } = string.Empty;
+    public string Kind { get; init; } = string.Empty;
+    public long? Size { get; init; }
+    public DateTimeOffset? MtimeUtc { get; init; }
+    public bool IsSymlink { get; init; }
+}
+
+public sealed class HealthData
+{
+    public string Status { get; init; } = "ok";
+    public string Version { get; init; } = AppMetadata.Version;
+    public long UptimeMs { get; init; }
+    public string Root { get; init; } = string.Empty;
+    public bool FollowSymlinks { get; init; }
+    public DefaultsData Limits { get; init; } = new();
 }
 
 [JsonSourceGenerationOptions(
@@ -317,16 +452,24 @@ public sealed class PatchData
 [JsonSerializable(typeof(ToolsCallResult))]
 [JsonSerializable(typeof(CapabilitiesRequest))]
 [JsonSerializable(typeof(RootDetectRequest))]
+[JsonSerializable(typeof(HealthRequest))]
 [JsonSerializable(typeof(ScanRequest))]
 [JsonSerializable(typeof(SearchRequest))]
 [JsonSerializable(typeof(OpenRequest))]
 [JsonSerializable(typeof(PatchRequest))]
+[JsonSerializable(typeof(PatchPreviewRequest))]
+[JsonSerializable(typeof(StatRequest))]
+[JsonSerializable(typeof(ReadDirRequest))]
 [JsonSerializable(typeof(CapabilitiesData))]
 [JsonSerializable(typeof(RootDetectData))]
+[JsonSerializable(typeof(HealthData))]
 [JsonSerializable(typeof(ScanData))]
 [JsonSerializable(typeof(SearchData))]
 [JsonSerializable(typeof(OpenData))]
 [JsonSerializable(typeof(PatchData))]
+[JsonSerializable(typeof(PatchPreviewData))]
+[JsonSerializable(typeof(StatData))]
+[JsonSerializable(typeof(ReadDirData))]
 [JsonSerializable(typeof(McpToolInfo))]
 internal partial class McpJsonSerializerContext : JsonSerializerContext
 {

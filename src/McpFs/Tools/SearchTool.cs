@@ -1,5 +1,7 @@
+using System.Text.RegularExpressions;
 using McpFs.Core;
 using McpFs.Core.Hashing;
+using McpFs.Core.Limits;
 using McpFs.Core.Search;
 using McpFs.Logging;
 using McpFs.Rpc;
@@ -35,17 +37,51 @@ public sealed class SearchTool
             return ToolResponse.Failure(ErrorCodes.InvalidRange, "query is required");
         }
 
-        var maxResults = request.MaxResults ?? _workspace.Config.SearchMaxResults;
-        if (maxResults <= 0)
+        if (request.Regex == true)
+        {
+            try
+            {
+                _ = new Regex(request.Query);
+            }
+            catch (ArgumentException)
+            {
+                return ToolResponse.Failure(ErrorCodes.InvalidRange, "invalid regex pattern");
+            }
+        }
+
+        if (request.MaxResults is <= 0)
         {
             return ToolResponse.Failure(ErrorCodes.InvalidRange, "maxResults must be > 0");
         }
 
-        var snippetBytes = request.SnippetBytes ?? _workspace.Config.SearchSnippetBytes;
-        if (snippetBytes < 32)
+        if (request.SnippetBytes is <= 0)
         {
-            return ToolResponse.Failure(ErrorCodes.InvalidRange, "snippetBytes must be >= 32");
+            return ToolResponse.Failure(ErrorCodes.InvalidRange, "snippetBytes must be > 0");
         }
+
+        if (request.MaxFilesScanned is <= 0)
+        {
+            return ToolResponse.Failure(ErrorCodes.InvalidRange, "maxFilesScanned must be > 0");
+        }
+
+        if (request.MaxFileSizeBytes is <= 0)
+        {
+            return ToolResponse.Failure(ErrorCodes.InvalidRange, "maxFileSizeBytes must be > 0");
+        }
+
+        if (request.TimeoutMs is <= 0)
+        {
+            return ToolResponse.Failure(ErrorCodes.InvalidRange, "timeoutMs must be > 0");
+        }
+
+        var options = new SearchRuntimeOptions
+        {
+            MaxResults = Math.Min(request.MaxResults ?? _workspace.Config.SearchMaxResults, Math.Min(_workspace.Config.SearchMaxResults, FsLimits.SearchHardCapResults)),
+            SnippetBytes = Math.Min(request.SnippetBytes ?? _workspace.Config.SearchSnippetBytes, Math.Min(_workspace.Config.SearchSnippetBytes, FsLimits.SearchHardCapSnippetBytes)),
+            MaxFilesScanned = Math.Min(request.MaxFilesScanned ?? _workspace.Config.SearchMaxFilesScanned, Math.Min(_workspace.Config.SearchMaxFilesScanned, FsLimits.SearchHardCapFilesScanned)),
+            MaxFileSizeBytes = Math.Min(request.MaxFileSizeBytes ?? _workspace.Config.SearchMaxFileSizeBytes, Math.Min(_workspace.Config.SearchMaxFileSizeBytes, FsLimits.SearchHardCapFileSizeBytes)),
+            TimeoutMs = Math.Min(request.TimeoutMs ?? _workspace.Config.SearchTimeoutMs, Math.Min(_workspace.Config.SearchTimeoutMs, FsLimits.SearchHardCapTimeoutMs))
+        };
 
         if (!_workspace.PathPolicy.TryResolveDirectory(request.Root, out var searchRootPath, out var searchRootRelative, out var pathError))
         {
@@ -60,8 +96,7 @@ public sealed class SearchTool
                 _workspace.RootPath,
                 searchRootRelative,
                 request,
-                maxResults,
-                snippetBytes,
+                options,
                 cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
@@ -73,15 +108,14 @@ public sealed class SearchTool
             _workspace,
             searchRootPath,
             request,
-            maxResults,
-            snippetBytes,
+            options,
             cancellationToken).ConfigureAwait(false);
 
         var hashedMatches = await FillContextHashesAsync(engineResult.Matches, cancellationToken).ConfigureAwait(false);
 
         var data = new SearchData
         {
-            Matches = hashedMatches,
+            Results = hashedMatches,
             Truncated = engineResult.Truncated,
             Engine = engineResult.Engine
         };

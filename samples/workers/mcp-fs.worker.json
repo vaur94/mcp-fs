@@ -1,0 +1,13 @@
+{
+  "name": "mcp-fs",
+  "toolPrefix": "fs",
+  "command": "./mcp-fs",
+  "args": [
+    "--config",
+    "./mcp-fs.config.json"
+  ],
+  "env": {
+    "MCP_FS_ROOT": "."
+  },
+  "callToolMs": 15000
+}

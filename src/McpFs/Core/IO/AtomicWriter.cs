@@ -1,10 +1,8 @@
-using System.Text;
-
 namespace McpFs.Core.IO;
 
 public sealed class AtomicWriter
 {
-    public async Task WriteTextAtomicAsync(string targetPath, string content, CancellationToken cancellationToken)
+    public async Task WriteBytesAtomicAsync(string targetPath, ReadOnlyMemory<byte> content, CancellationToken cancellationToken)
     {
         var directory = Path.GetDirectoryName(targetPath);
         if (string.IsNullOrWhiteSpace(directory))
@@ -14,7 +12,8 @@ public sealed class AtomicWriter
 
         Directory.CreateDirectory(directory);
 
-        var tempFile = Path.Combine(directory, $".mcpfs-{Guid.NewGuid():N}.tmp");
+        var fileName = Path.GetFileName(targetPath);
+        var tempFile = Path.Combine(directory, $"{fileName}.mcpfs.tmp.{Guid.NewGuid():N}");
 
         try
         {
@@ -25,11 +24,10 @@ public sealed class AtomicWriter
                 FileShare.None,
                 bufferSize: 16 * 1024,
                 FileOptions.Asynchronous | FileOptions.WriteThrough))
-            await using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
             {
-                await writer.WriteAsync(content.AsMemory(), cancellationToken).ConfigureAwait(false);
-                await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
+                await stream.WriteAsync(content, cancellationToken).ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
             }
 
             if (OperatingSystem.IsWindows() && File.Exists(targetPath))

@@ -1,33 +1,23 @@
 using McpFs.Core;
 using McpFs.Core.Hashing;
-using McpFs.Core.IO;
 using McpFs.Core.Limits;
 using McpFs.Core.Patch;
-using McpFs.Logging;
 using McpFs.Rpc;
 
 namespace McpFs.Tools;
 
-public sealed class PatchTool
+public sealed class PatchPreviewTool
 {
     private readonly Workspace _workspace;
-    private readonly AtomicWriter _atomicWriter;
-    private readonly StderrLogger _logger;
     private readonly PatchEngine _engine;
 
-    public PatchTool(
-        Workspace workspace,
-        ContentHasher hasher,
-        AtomicWriter atomicWriter,
-        StderrLogger logger)
+    public PatchPreviewTool(Workspace workspace, ContentHasher hasher)
     {
         _workspace = workspace;
-        _atomicWriter = atomicWriter;
-        _logger = logger;
         _engine = new PatchEngine(hasher);
     }
 
-    public async Task<ToolResponse> ExecuteAsync(PatchRequest request, CancellationToken cancellationToken)
+    public async Task<ToolResponse> ExecuteAsync(PatchPreviewRequest request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.Path))
         {
@@ -70,29 +60,15 @@ public sealed class PatchTool
             return compute.Error;
         }
 
-        try
+        var data = new PatchPreviewData
         {
-            await _atomicWriter.WriteBytesAtomicAsync(fullPath, compute.NewBytes, cancellationToken).ConfigureAwait(false);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return ToolResponse.Failure(ErrorCodes.PermissionDenied, "Permission denied.");
-        }
-        catch (Exception ex)
-        {
-            _logger.Error($"patch write failed path={relativePath}: {ex.Message}");
-            return ToolResponse.Failure(ErrorCodes.InternalError, "atomic write failed");
-        }
-
-        var data = new PatchData
-        {
+            WouldApply = true,
             PostHash = compute.PostHash,
-            AppliedEditsCount = compute.AppliedEditsCount,
+            DiffSummary = compute.DiffSummary,
             BytesChanged = compute.BytesChanged,
-            LineDelta = compute.LineDelta,
-            Summary = $"Applied {compute.AppliedEditsCount} edit(s) to {relativePath}."
+            LineDelta = compute.LineDelta
         };
 
-        return ToolResponse.Success(data, McpJsonSerializerContext.Default.PatchData);
+        return ToolResponse.Success(data, McpJsonSerializerContext.Default.PatchPreviewData);
     }
 }

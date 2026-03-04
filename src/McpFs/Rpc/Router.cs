@@ -12,7 +12,7 @@ public sealed class Router
         new McpToolInfo
         {
             Name = "fs.capabilities",
-            Description = "Return runtime and tool capability information.",
+            Description = "Return runtime limits, defaults, and available features.",
             InputSchema = ParseSchema("""
             {"type":"object","additionalProperties":false}
             """)
@@ -20,7 +20,15 @@ public sealed class Router
         new McpToolInfo
         {
             Name = "fs.root_detect",
-            Description = "Detect and return the effective workspace root.",
+            Description = "Return effective workspace root and detection reason.",
+            InputSchema = ParseSchema("""
+            {"type":"object","additionalProperties":false}
+            """)
+        },
+        new McpToolInfo
+        {
+            Name = "fs.health",
+            Description = "Return process health, uptime, and active limits.",
             InputSchema = ParseSchema("""
             {"type":"object","additionalProperties":false}
             """)
@@ -28,7 +36,7 @@ public sealed class Router
         new McpToolInfo
         {
             Name = "fs.scan",
-            Description = "List files/directories with ignore rules and limits.",
+            Description = "Recursively list files and directories with ignore rules and caps.",
             InputSchema = ParseSchema("""
             {
               "type":"object",
@@ -39,6 +47,38 @@ public sealed class Router
                 "includeGlobs":{"type":"array","items":{"type":"string"}},
                 "excludeGlobs":{"type":"array","items":{"type":"string"}},
                 "limit":{"type":"integer","minimum":1}
+              }
+            }
+            """)
+        },
+        new McpToolInfo
+        {
+            Name = "fs.readDir",
+            Description = "List a single directory level with minimal metadata.",
+            InputSchema = ParseSchema("""
+            {
+              "type":"object",
+              "additionalProperties":false,
+              "properties":{
+                "path":{"type":"string"},
+                "includeFiles":{"type":"boolean"},
+                "includeDirs":{"type":"boolean"},
+                "limit":{"type":"integer","minimum":1}
+              }
+            }
+            """)
+        },
+        new McpToolInfo
+        {
+            Name = "fs.stat",
+            Description = "Return file or directory metadata and hash data.",
+            InputSchema = ParseSchema("""
+            {
+              "type":"object",
+              "required":["path"],
+              "additionalProperties":false,
+              "properties":{
+                "path":{"type":"string"}
               }
             }
             """)
@@ -60,7 +100,10 @@ public sealed class Router
                 "glob":{"type":"array","items":{"type":"string"}},
                 "excludeGlob":{"type":"array","items":{"type":"string"}},
                 "maxResults":{"type":"integer","minimum":1},
-                "snippetBytes":{"type":"integer","minimum":32}
+                "snippetBytes":{"type":"integer","minimum":1},
+                "maxFilesScanned":{"type":"integer","minimum":1},
+                "maxFileSizeBytes":{"type":"integer","minimum":1},
+                "timeoutMs":{"type":"integer","minimum":1}
               }
             }
             """)
@@ -68,7 +111,7 @@ public sealed class Router
         new McpToolInfo
         {
             Name = "fs.open",
-            Description = "Open a file by line range with byte limits.",
+            Description = "Open a file by line range with strict caps.",
             InputSchema = ParseSchema("""
             {
               "type":"object",
@@ -90,12 +133,12 @@ public sealed class Router
             InputSchema = ParseSchema("""
             {
               "type":"object",
-              "required":["path","preHash","mode","edits"],
+              "required":["path","preHash","edits"],
               "additionalProperties":false,
               "properties":{
                 "path":{"type":"string"},
                 "preHash":{"type":"string"},
-                "mode":{"type":"string","enum":["strict","best_effort"]},
+                "mode":{"type":"string","enum":["strict"]},
                 "edits":{
                   "type":"array",
                   "items":{
@@ -124,6 +167,67 @@ public sealed class Router
                         "required":["line","col"],
                         "additionalProperties":false
                       },
+                      "startLine":{"type":"integer","minimum":1},
+                      "startCol":{"type":"integer","minimum":1},
+                      "endLine":{"type":"integer","minimum":1},
+                      "endCol":{"type":"integer","minimum":1},
+                      "line":{"type":"integer","minimum":1},
+                      "col":{"type":"integer","minimum":1},
+                      "text":{"type":"string"}
+                    }
+                  }
+                }
+              }
+            }
+            """)
+        },
+        new McpToolInfo
+        {
+            Name = "fs.patchPreview",
+            Description = "Validate and preview patch result without writing.",
+            InputSchema = ParseSchema("""
+            {
+              "type":"object",
+              "required":["path","preHash","edits"],
+              "additionalProperties":false,
+              "properties":{
+                "path":{"type":"string"},
+                "preHash":{"type":"string"},
+                "mode":{"type":"string","enum":["strict"]},
+                "edits":{
+                  "type":"array",
+                  "items":{
+                    "type":"object",
+                    "required":["op"],
+                    "additionalProperties":false,
+                    "properties":{
+                      "op":{"type":"string","enum":["replace","insert","delete"]},
+                      "range":{
+                        "type":"object",
+                        "properties":{
+                          "startLine":{"type":"integer","minimum":1},
+                          "startCol":{"type":"integer","minimum":1},
+                          "endLine":{"type":"integer","minimum":1},
+                          "endCol":{"type":"integer","minimum":1}
+                        },
+                        "required":["startLine","startCol","endLine","endCol"],
+                        "additionalProperties":false
+                      },
+                      "at":{
+                        "type":"object",
+                        "properties":{
+                          "line":{"type":"integer","minimum":1},
+                          "col":{"type":"integer","minimum":1}
+                        },
+                        "required":["line","col"],
+                        "additionalProperties":false
+                      },
+                      "startLine":{"type":"integer","minimum":1},
+                      "startCol":{"type":"integer","minimum":1},
+                      "endLine":{"type":"integer","minimum":1},
+                      "endCol":{"type":"integer","minimum":1},
+                      "line":{"type":"integer","minimum":1},
+                      "col":{"type":"integer","minimum":1},
                       "text":{"type":"string"}
                     }
                   }
@@ -136,27 +240,39 @@ public sealed class Router
 
     private readonly CapabilitiesTool _capabilitiesTool;
     private readonly RootDetectTool _rootDetectTool;
+    private readonly HealthTool _healthTool;
     private readonly ScanTool _scanTool;
     private readonly SearchTool _searchTool;
     private readonly OpenTool _openTool;
     private readonly PatchTool _patchTool;
+    private readonly PatchPreviewTool _patchPreviewTool;
+    private readonly StatTool _statTool;
+    private readonly ReadDirTool _readDirTool;
     private readonly StderrLogger _logger;
 
     public Router(
         CapabilitiesTool capabilitiesTool,
         RootDetectTool rootDetectTool,
+        HealthTool healthTool,
         ScanTool scanTool,
         SearchTool searchTool,
         OpenTool openTool,
         PatchTool patchTool,
+        PatchPreviewTool patchPreviewTool,
+        StatTool statTool,
+        ReadDirTool readDirTool,
         StderrLogger logger)
     {
         _capabilitiesTool = capabilitiesTool;
         _rootDetectTool = rootDetectTool;
+        _healthTool = healthTool;
         _scanTool = scanTool;
         _searchTool = searchTool;
         _openTool = openTool;
         _patchTool = patchTool;
+        _patchPreviewTool = patchPreviewTool;
+        _statTool = statTool;
+        _readDirTool = readDirTool;
         _logger = logger;
     }
 
@@ -174,119 +290,105 @@ public sealed class Router
         switch (request.Method)
         {
             case "initialize":
-            {
-                var result = new InitializeResult
                 {
-                    Capabilities = new ServerCapabilities
+                    var result = new InitializeResult
                     {
-                        Tools = new ToolCapability
+                        Capabilities = new ServerCapabilities
                         {
-                            ListChanged = false
+                            Tools = new ToolCapability
+                            {
+                                ListChanged = false
+                            }
+                        },
+                        ServerInfo = new ServerInfo
+                        {
+                            Name = AppMetadata.Name,
+                            Version = AppMetadata.Version
                         }
-                    },
-                    ServerInfo = new ServerInfo
-                    {
-                        Name = "mcp-fs",
-                        Version = "0.1.0"
-                    }
-                };
+                    };
 
-                return BuildResult(request.Id, result, McpJsonSerializerContext.Default.InitializeResult);
-            }
+                    return BuildResult(request.Id, result, McpJsonSerializerContext.Default.InitializeResult);
+                }
             case "initialized":
                 return null;
             case "tools/list":
-            {
-                var result = new ToolsListResult
                 {
-                    Tools = Tools
-                };
+                    var result = new ToolsListResult
+                    {
+                        Tools = Tools
+                    };
 
-                return BuildResult(request.Id, result, McpJsonSerializerContext.Default.ToolsListResult);
-            }
-            case "tools/call":
-            {
-                if (!TryDeserialize(request.Params, McpJsonSerializerContext.Default.ToolsCallParams, out ToolsCallParams? callParams, out JsonRpcResponse? invalidParamsResponse, request.Id))
-                {
-                    return invalidParamsResponse;
+                    return BuildResult(request.Id, result, McpJsonSerializerContext.Default.ToolsListResult);
                 }
-
-                var toolResponse = await CallToolAsync(callParams!, cancellationToken).ConfigureAwait(false);
-                var text = JsonSerializer.Serialize(toolResponse, McpJsonSerializerContext.Default.ToolResponse);
-                var result = new ToolsCallResult
+            case "tools/call":
                 {
-                    Content =
-                    [
-                        new McpContentItem
+                    if (!TryDeserialize(request.Params, McpJsonSerializerContext.Default.ToolsCallParams, out ToolsCallParams? callParams, out JsonRpcResponse? invalidParamsResponse, request.Id))
+                    {
+                        return invalidParamsResponse;
+                    }
+
+                    var toolResponse = await CallToolAsync(callParams!, cancellationToken).ConfigureAwait(false);
+                    var text = JsonSerializer.Serialize(toolResponse, McpJsonSerializerContext.Default.ToolResponse);
+                    var result = new ToolsCallResult
+                    {
+                        Content =
+                        [
+                            new McpContentItem
                         {
                             Type = "text",
                             Text = text
                         }
-                    ],
-                    StructuredContent = toolResponse,
-                    IsError = !toolResponse.Ok
-                };
+                        ],
+                        StructuredContent = toolResponse,
+                        IsError = !toolResponse.Ok
+                    };
 
-                return BuildResult(request.Id, result, McpJsonSerializerContext.Default.ToolsCallResult);
-            }
+                    return BuildResult(request.Id, result, McpJsonSerializerContext.Default.ToolsCallResult);
+                }
             case "fs.capabilities":
-            {
-                var toolResponse = _capabilitiesTool.Execute();
-                return BuildResult(request.Id, toolResponse, McpJsonSerializerContext.Default.ToolResponse);
-            }
+                return BuildResult(request.Id, _capabilitiesTool.Execute(), McpJsonSerializerContext.Default.ToolResponse);
             case "fs.root_detect":
-            {
-                var toolResponse = _rootDetectTool.Execute();
-                return BuildResult(request.Id, toolResponse, McpJsonSerializerContext.Default.ToolResponse);
-            }
+                return BuildResult(request.Id, _rootDetectTool.Execute(), McpJsonSerializerContext.Default.ToolResponse);
+            case "fs.health":
+                return BuildResult(request.Id, _healthTool.Execute(), McpJsonSerializerContext.Default.ToolResponse);
             case "fs.scan":
-            {
-                if (!TryDeserialize(request.Params, McpJsonSerializerContext.Default.ScanRequest, out ScanRequest? scanRequest, out JsonRpcResponse? invalidParamsResponse, request.Id))
-                {
-                    return invalidParamsResponse;
-                }
-
-                var toolResponse = await _scanTool.ExecuteAsync(scanRequest!, cancellationToken).ConfigureAwait(false);
-                return BuildResult(request.Id, toolResponse, McpJsonSerializerContext.Default.ToolResponse);
-            }
+                return await RouteDirectAsync(request, McpJsonSerializerContext.Default.ScanRequest, _scanTool.ExecuteAsync, cancellationToken).ConfigureAwait(false);
             case "fs.search":
-            {
-                if (!TryDeserialize(request.Params, McpJsonSerializerContext.Default.SearchRequest, out SearchRequest? searchRequest, out JsonRpcResponse? invalidParamsResponse, request.Id))
-                {
-                    return invalidParamsResponse;
-                }
-
-                var toolResponse = await _searchTool.ExecuteAsync(searchRequest!, cancellationToken).ConfigureAwait(false);
-                return BuildResult(request.Id, toolResponse, McpJsonSerializerContext.Default.ToolResponse);
-            }
+                return await RouteDirectAsync(request, McpJsonSerializerContext.Default.SearchRequest, _searchTool.ExecuteAsync, cancellationToken).ConfigureAwait(false);
             case "fs.open":
-            {
-                if (!TryDeserialize(request.Params, McpJsonSerializerContext.Default.OpenRequest, out OpenRequest? openRequest, out JsonRpcResponse? invalidParamsResponse, request.Id))
-                {
-                    return invalidParamsResponse;
-                }
-
-                var toolResponse = await _openTool.ExecuteAsync(openRequest!, cancellationToken).ConfigureAwait(false);
-                return BuildResult(request.Id, toolResponse, McpJsonSerializerContext.Default.ToolResponse);
-            }
+                return await RouteDirectAsync(request, McpJsonSerializerContext.Default.OpenRequest, _openTool.ExecuteAsync, cancellationToken).ConfigureAwait(false);
             case "fs.patch":
-            {
-                if (!TryDeserialize(request.Params, McpJsonSerializerContext.Default.PatchRequest, out PatchRequest? patchRequest, out JsonRpcResponse? invalidParamsResponse, request.Id))
-                {
-                    return invalidParamsResponse;
-                }
-
-                var toolResponse = await _patchTool.ExecuteAsync(patchRequest!, cancellationToken).ConfigureAwait(false);
-                return BuildResult(request.Id, toolResponse, McpJsonSerializerContext.Default.ToolResponse);
-            }
+                return await RouteDirectAsync(request, McpJsonSerializerContext.Default.PatchRequest, _patchTool.ExecuteAsync, cancellationToken).ConfigureAwait(false);
+            case "fs.patchPreview":
+                return await RouteDirectAsync(request, McpJsonSerializerContext.Default.PatchPreviewRequest, _patchPreviewTool.ExecuteAsync, cancellationToken).ConfigureAwait(false);
+            case "fs.stat":
+                return await RouteDirectAsync(request, McpJsonSerializerContext.Default.StatRequest, _statTool.ExecuteAsync, cancellationToken).ConfigureAwait(false);
+            case "fs.readDir":
+                return await RouteDirectAsync(request, McpJsonSerializerContext.Default.ReadDirRequest, _readDirTool.ExecuteAsync, cancellationToken).ConfigureAwait(false);
             default:
-            {
-                _logger.Warn($"unknown method={request.Method}");
-                return shouldRespond
-                    ? BuildError(request.Id, -32601, "Method not found")
-                    : null;
-            }
+                {
+                    _logger.Warn($"unknown method={request.Method}");
+                    return shouldRespond
+                        ? BuildError(request.Id, -32601, "Method not found")
+                        : null;
+                }
         }
+    }
+
+    private async Task<JsonRpcResponse> RouteDirectAsync<TRequest>(
+        JsonRpcRequest request,
+        JsonTypeInfo<TRequest> typeInfo,
+        Func<TRequest, CancellationToken, Task<ToolResponse>> executor,
+        CancellationToken cancellationToken)
+        where TRequest : class, new()
+    {
+        if (!TryDeserialize(request.Params, typeInfo, out TRequest? parsed, out JsonRpcResponse? invalidParamsResponse, request.Id))
+        {
+            return invalidParamsResponse!;
+        }
+
+        var response = await executor(parsed!, cancellationToken).ConfigureAwait(false);
+        return BuildResult(request.Id, response, McpJsonSerializerContext.Default.ToolResponse);
     }
 
     private async Task<ToolResponse> CallToolAsync(ToolsCallParams call, CancellationToken cancellationToken)
@@ -295,10 +397,14 @@ public sealed class Router
         {
             "fs.capabilities" => _capabilitiesTool.Execute(),
             "fs.root_detect" => _rootDetectTool.Execute(),
+            "fs.health" => _healthTool.Execute(),
             "fs.scan" => await RouteToolAsync(call.Arguments, McpJsonSerializerContext.Default.ScanRequest, _scanTool.ExecuteAsync, cancellationToken).ConfigureAwait(false),
             "fs.search" => await RouteToolAsync(call.Arguments, McpJsonSerializerContext.Default.SearchRequest, _searchTool.ExecuteAsync, cancellationToken).ConfigureAwait(false),
             "fs.open" => await RouteToolAsync(call.Arguments, McpJsonSerializerContext.Default.OpenRequest, _openTool.ExecuteAsync, cancellationToken).ConfigureAwait(false),
             "fs.patch" => await RouteToolAsync(call.Arguments, McpJsonSerializerContext.Default.PatchRequest, _patchTool.ExecuteAsync, cancellationToken).ConfigureAwait(false),
+            "fs.patchPreview" => await RouteToolAsync(call.Arguments, McpJsonSerializerContext.Default.PatchPreviewRequest, _patchPreviewTool.ExecuteAsync, cancellationToken).ConfigureAwait(false),
+            "fs.stat" => await RouteToolAsync(call.Arguments, McpJsonSerializerContext.Default.StatRequest, _statTool.ExecuteAsync, cancellationToken).ConfigureAwait(false),
+            "fs.readDir" => await RouteToolAsync(call.Arguments, McpJsonSerializerContext.Default.ReadDirRequest, _readDirTool.ExecuteAsync, cancellationToken).ConfigureAwait(false),
             _ => ToolResponse.Failure(ErrorCodes.NotFound, $"Unknown tool '{call.Name}'")
         };
     }

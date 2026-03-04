@@ -34,7 +34,7 @@ public sealed class Workspace
     public static Workspace Create(McpFsConfig config, StderrLogger logger)
     {
         var detection = DetectRoot(config.WorkspaceRoot);
-        var pathPolicy = new PathPolicy(detection.RootPath);
+        var pathPolicy = new PathPolicy(detection.RootPath, config.FollowSymlinks);
         var matcher = IgnoreMatcher.Load(detection.RootPath);
 
         return new Workspace(
@@ -54,12 +54,12 @@ public sealed class Workspace
         var envRoot = Environment.GetEnvironmentVariable("MCP_FS_ROOT");
         if (!string.IsNullOrWhiteSpace(envRoot) && Directory.Exists(envRoot))
         {
-            return Build(envRoot, "env:MCP_FS_ROOT");
+            return Build(envRoot, "env");
         }
 
         if (!string.IsNullOrWhiteSpace(configRootOverride) && Directory.Exists(configRootOverride))
         {
-            return Build(configRootOverride, "config:workspaceRoot");
+            return Build(configRootOverride, "config");
         }
 
         var cwd = Directory.GetCurrentDirectory();
@@ -67,7 +67,7 @@ public sealed class Workspace
         var gitRoot = FindUpward(cwd, directory => Directory.Exists(Path.Combine(directory, ".git")));
         if (gitRoot is not null)
         {
-            return Build(gitRoot, "upward:.git");
+            return Build(gitRoot, "git");
         }
 
         var slnRoot = FindUpward(cwd, directory =>
@@ -75,7 +75,7 @@ public sealed class Workspace
             Directory.EnumerateFiles(directory, "*.sln", SearchOption.TopDirectoryOnly).Any());
         if (slnRoot is not null)
         {
-            return Build(slnRoot, "upward:sln-or-global-json");
+            return Build(slnRoot, "sln");
         }
 
         var jsRoot = FindUpward(cwd, directory =>
@@ -83,26 +83,40 @@ public sealed class Workspace
             File.Exists(Path.Combine(directory, "pnpm-workspace.yaml")));
         if (jsRoot is not null)
         {
-            return Build(jsRoot, "upward:package-json-or-pnpm-workspace");
+            return Build(jsRoot, "node");
         }
 
         var pyRoot = FindUpward(cwd, directory => File.Exists(Path.Combine(directory, "pyproject.toml")));
         if (pyRoot is not null)
         {
-            return Build(pyRoot, "upward:pyproject-toml");
+            return Build(pyRoot, "python");
         }
 
-        return Build(cwd, "fallback:cwd");
+        return Build(cwd, "cwd");
     }
 
     public bool ShouldSkipSymlink(FileSystemInfo info)
     {
-        if (FollowSymlinks)
+        var isSymlink = info.LinkTarget is not null || info.Attributes.HasFlag(FileAttributes.ReparsePoint);
+        if (!isSymlink)
         {
             return false;
         }
 
-        return info.LinkTarget is not null || info.Attributes.HasFlag(FileAttributes.ReparsePoint);
+        if (!FollowSymlinks)
+        {
+            return true;
+        }
+
+        try
+        {
+            var relative = PathPolicy.ToRelativePath(info.FullName);
+            return !PathPolicy.TryResolveExistingPath(relative, out _, out _, out _, out _);
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static string? FindUpward(string startDirectory, Func<string, bool> predicate)

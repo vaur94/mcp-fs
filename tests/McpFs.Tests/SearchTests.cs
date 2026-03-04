@@ -1,10 +1,9 @@
-using System.Text.Json;
 using FluentAssertions;
 using McpFs.Core.Hashing;
 using McpFs.Core.Search;
 using McpFs.Logging;
-using McpFs.Rpc;
 using McpFs.Tools;
+using Rpc = McpFs.Rpc;
 
 namespace McpFs.Tests;
 
@@ -25,19 +24,19 @@ public sealed class SearchTests
             var ripgrep = new RipgrepRunner(logger, enabled: false);
             var tool = new SearchTool(workspace, ripgrep, fallback, hasher, logger);
 
-            var response = await tool.ExecuteAsync(new SearchRequest
+            var response = await tool.ExecuteAsync(new Rpc.SearchRequest
             {
                 Query = "needle",
                 CaseSensitive = true
             }, CancellationToken.None);
 
             response.Ok.Should().BeTrue();
-            var data = DeserializeData<SearchData>(response);
+            var data = TestHelpers.DeserializeData<Rpc.SearchData>(response);
             data.Engine.Should().Be("fallback");
-            data.Matches.Should().HaveCount(1);
-            data.Matches[0].Path.Should().Be("sample.txt");
-            data.Matches[0].Line.Should().Be(2);
-            data.Matches[0].Col.Should().Be(6);
+            data.Results.Should().HaveCount(1);
+            data.Results[0].Path.Should().Be("sample.txt");
+            data.Results[0].Line.Should().Be(2);
+            data.Results[0].Col.Should().Be(6);
         }
         finally
         {
@@ -63,6 +62,70 @@ public sealed class SearchTests
     }
 
     [Fact]
+    public async Task Search_ShouldRespectMaxResults()
+    {
+        var root = TestHelpers.CreateTempDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "sample.txt"), "needle\nneedle\nneedle\n");
+
+            var workspace = TestHelpers.CreateWorkspace(root);
+            var logger = new StderrLogger("error");
+            var hasher = new ContentHasher();
+            var fallback = new FallbackSearcher(hasher, logger);
+            var tool = new SearchTool(workspace, new RipgrepRunner(logger, enabled: false), fallback, hasher, logger);
+
+            var response = await tool.ExecuteAsync(new Rpc.SearchRequest
+            {
+                Query = "needle",
+                MaxResults = 2
+            }, CancellationToken.None);
+
+            response.Ok.Should().BeTrue();
+            var data = TestHelpers.DeserializeData<Rpc.SearchData>(response);
+            data.Results.Should().HaveCount(2);
+            data.Truncated.Should().BeTrue();
+        }
+        finally
+        {
+            TestHelpers.DeleteDirectory(root);
+        }
+    }
+
+    [Fact]
+    public async Task Search_ShouldRespectMaxFilesScannedInFallback()
+    {
+        var root = TestHelpers.CreateTempDirectory();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "a.txt"), "x\n");
+            File.WriteAllText(Path.Combine(root, "b.txt"), "x\n");
+
+            var workspace = TestHelpers.CreateWorkspace(root);
+            var logger = new StderrLogger("error");
+            var hasher = new ContentHasher();
+            var fallback = new FallbackSearcher(hasher, logger);
+            var tool = new SearchTool(workspace, new RipgrepRunner(logger, enabled: false), fallback, hasher, logger);
+
+            var response = await tool.ExecuteAsync(new Rpc.SearchRequest
+            {
+                Query = "x",
+                MaxFilesScanned = 1,
+                MaxResults = 10
+            }, CancellationToken.None);
+
+            response.Ok.Should().BeTrue();
+            var data = TestHelpers.DeserializeData<Rpc.SearchData>(response);
+            data.Truncated.Should().BeTrue();
+            data.Engine.Should().Be("fallback");
+        }
+        finally
+        {
+            TestHelpers.DeleteDirectory(root);
+        }
+    }
+
+    [Fact]
     public async Task RipgrepSearch_WhenAvailable_ShouldRunWithRgEngine()
     {
         var root = TestHelpers.CreateTempDirectory();
@@ -82,28 +145,17 @@ public sealed class SearchTests
             }
 
             var tool = new SearchTool(workspace, ripgrep, fallback, hasher, logger);
-            var response = await tool.ExecuteAsync(new SearchRequest { Query = "find" }, CancellationToken.None);
+            var response = await tool.ExecuteAsync(new Rpc.SearchRequest { Query = "find" }, CancellationToken.None);
 
             response.Ok.Should().BeTrue();
-            var data = DeserializeData<SearchData>(response);
+            var data = TestHelpers.DeserializeData<Rpc.SearchData>(response);
             data.Engine.Should().Be("rg");
-            data.Matches.Should().NotBeEmpty();
-            data.Matches[0].Path.Should().Be("sample.txt");
+            data.Results.Should().NotBeEmpty();
+            data.Results[0].Path.Should().Be("sample.txt");
         }
         finally
         {
             TestHelpers.DeleteDirectory(root);
         }
-    }
-
-    private static T DeserializeData<T>(ToolResponse response)
-    {
-        response.Data.Should().NotBeNull();
-        return JsonSerializer.Deserialize<T>(
-            response.Data!.Value.GetRawText(),
-            new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            })!;
     }
 }

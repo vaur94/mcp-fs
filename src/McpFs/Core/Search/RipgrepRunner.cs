@@ -34,8 +34,7 @@ public sealed class RipgrepRunner
         string workspaceRoot,
         string searchRoot,
         SearchRequest request,
-        int maxResults,
-        int snippetBytes,
+        SearchRuntimeOptions options,
         CancellationToken cancellationToken)
     {
         if (!await IsAvailableAsync(cancellationToken).ConfigureAwait(false))
@@ -50,7 +49,8 @@ public sealed class RipgrepRunner
             "--column",
             "--color",
             "never",
-            "--no-messages"
+            "--no-messages",
+            "--no-ignore"
         };
 
         if (request.Regex != true)
@@ -62,6 +62,9 @@ public sealed class RipgrepRunner
         {
             args.Add("--ignore-case");
         }
+
+        args.Add("--max-filesize");
+        args.Add(options.MaxFileSizeBytes.ToString());
 
         foreach (var glob in request.Glob ?? Array.Empty<string>())
         {
@@ -79,6 +82,13 @@ public sealed class RipgrepRunner
         {
             args.Add("--glob");
             args.Add($"!{glob}");
+        }
+
+        var rootIgnoreFile = Path.Combine(workspaceRoot, ".gitignore");
+        if (File.Exists(rootIgnoreFile))
+        {
+            args.Add("--ignore-file");
+            args.Add(rootIgnoreFile);
         }
 
         args.Add(request.Query);
@@ -113,47 +123,56 @@ public sealed class RipgrepRunner
         }
 
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+        var stopwatch = Stopwatch.StartNew();
 
-        var matches = new List<SearchMatch>(Math.Min(maxResults, 256));
+        var matches = new List<SearchMatch>(Math.Min(options.MaxResults, 256));
+        var matchedFiles = new HashSet<string>(StringComparer.Ordinal);
         var truncated = false;
 
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (stopwatch.ElapsedMilliseconds > options.TimeoutMs)
+            {
+                truncated = true;
+                KillSafely(process);
+                break;
+            }
+
             var line = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line is null)
             {
                 break;
             }
 
-            if (TryParseMatchJsonLine(line, snippetBytes, out var parsed))
+            if (!TryParseMatchJsonLine(line, options.SnippetBytes, out var parsed))
             {
-                foreach (var match in parsed)
-                {
-                    matches.Add(match);
-                    if (matches.Count >= maxResults)
-                    {
-                        truncated = true;
-                        try
-                        {
-                            if (!process.HasExited)
-                            {
-                                process.Kill(entireProcessTree: true);
-                            }
-                        }
-                        catch
-                        {
-                            // ignored
-                        }
+                continue;
+            }
 
-                        break;
-                    }
-                }
-
-                if (truncated)
+            foreach (var match in parsed)
+            {
+                matchedFiles.Add(match.Path);
+                if (matchedFiles.Count > options.MaxFilesScanned)
                 {
+                    truncated = true;
+                    KillSafely(process);
                     break;
                 }
+
+                matches.Add(match);
+                if (matches.Count >= options.MaxResults)
+                {
+                    truncated = true;
+                    KillSafely(process);
+                    break;
+                }
+            }
+
+            if (truncated)
+            {
+                break;
             }
         }
 
@@ -295,6 +314,21 @@ public sealed class RipgrepRunner
         }
 
         return snippet;
+    }
+
+    private static void KillSafely(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+        }
+        catch
+        {
+            // ignored
+        }
     }
 
     private static async Task<bool> ProbeAvailabilityAsync(CancellationToken cancellationToken)

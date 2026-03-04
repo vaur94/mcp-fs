@@ -1,6 +1,7 @@
 using McpFs.Core;
 using McpFs.Core.Hashing;
 using McpFs.Core.Ignore;
+using McpFs.Core.Limits;
 using McpFs.Logging;
 using McpFs.Rpc;
 
@@ -21,39 +22,43 @@ public sealed class ScanTool
 
     public async Task<ToolResponse> ExecuteAsync(ScanRequest request, CancellationToken cancellationToken)
     {
-        var limit = request.Limit ?? _workspace.Config.ScanLimit;
-        if (limit <= 0)
+        if (request.Limit is <= 0)
         {
             return ToolResponse.Failure(ErrorCodes.InvalidRange, "limit must be > 0");
         }
 
-        var maxDepth = request.MaxDepth ?? _workspace.Config.ScanMaxDepth;
-        if (maxDepth < 0)
+        if (request.MaxDepth is < 0)
         {
             return ToolResponse.Failure(ErrorCodes.InvalidRange, "maxDepth must be >= 0");
         }
 
-        if (!_workspace.PathPolicy.TryResolveDirectory(request.Root, out var rootPath, out var rootRelative, out var pathError))
+        var effectiveLimit = Math.Min(
+            request.Limit ?? _workspace.Config.ScanLimit,
+            Math.Min(_workspace.Config.ScanLimit, FsLimits.ScanHardCapLimit));
+
+        var effectiveDepth = Math.Min(
+            request.MaxDepth ?? _workspace.Config.ScanMaxDepth,
+            Math.Min(_workspace.Config.ScanMaxDepth, FsLimits.ScanHardCapDepth));
+
+        if (!_workspace.PathPolicy.TryResolveDirectory(request.Root, out var rootPath, out _, out var pathError))
         {
             return pathError!;
         }
 
-        var rootDepth = rootRelative == "." ? 0 : rootRelative.Split('/').Length;
-
-        var items = new List<ScanItem>(Math.Min(limit, 512));
+        var entries = new List<ScanItem>(Math.Min(effectiveLimit, 512));
         var truncated = false;
-        var pending = new Stack<string>();
-        pending.Push(rootPath);
+        var pending = new Stack<(string path, int depth)>();
+        pending.Push((rootPath, 0));
 
-        while (pending.Count > 0)
+        while (pending.Count > 0 && !truncated)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var current = pending.Pop();
+            var (current, depth) = pending.Pop();
 
-            IEnumerable<string> entries;
+            IEnumerable<string> children;
             try
             {
-                entries = Directory.EnumerateFileSystemEntries(current);
+                children = Directory.EnumerateFileSystemEntries(current);
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
             {
@@ -61,21 +66,23 @@ public sealed class ScanTool
                 continue;
             }
 
-            foreach (var entry in entries)
+            foreach (var child in children)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                FileSystemInfo info = Directory.Exists(entry)
-                    ? new DirectoryInfo(entry)
-                    : new FileInfo(entry);
+                FileSystemInfo info = Directory.Exists(child)
+                    ? new DirectoryInfo(child)
+                    : new FileInfo(child);
 
                 if (_workspace.ShouldSkipSymlink(info))
                 {
                     continue;
                 }
 
-                var relativePath = _workspace.PathPolicy.ToRelativePath(entry);
-                if (_workspace.IgnoreMatcher.IsIgnored(relativePath, info is DirectoryInfo))
+                var relativePath = _workspace.PathPolicy.ToRelativePath(child);
+                var isDirectory = info is DirectoryInfo;
+
+                if (_workspace.IgnoreMatcher.IsIgnored(relativePath, isDirectory))
                 {
                     continue;
                 }
@@ -90,77 +97,62 @@ public sealed class ScanTool
                     continue;
                 }
 
-                var depth = relativePath.Split('/').Length - rootDepth;
-                if (depth < 0)
+                var nextDepth = depth + 1;
+                if (nextDepth > effectiveDepth)
                 {
                     continue;
                 }
 
-                if (depth > maxDepth)
+                if (isDirectory)
                 {
-                    continue;
-                }
-
-                ScanItem item;
-                if (info is DirectoryInfo directoryInfo)
-                {
-                    item = new ScanItem
+                    entries.Add(new ScanItem
                     {
                         Path = relativePath,
                         Kind = "dir",
-                        MtimeUtc = directoryInfo.LastWriteTimeUtc
-                    };
+                        MtimeUtc = info.LastWriteTimeUtc
+                    });
 
-                    if (depth < maxDepth)
+                    if (nextDepth < effectiveDepth)
                     {
-                        pending.Push(entry);
+                        pending.Push((child, nextDepth));
                     }
                 }
                 else
                 {
                     var fileInfo = (FileInfo)info;
                     string? quickHash8 = null;
-                    if (fileInfo.Length <= 1024 * 1024)
+                    try
                     {
-                        try
-                        {
-                            var hash = await _hasher.ComputeContextHashAsync(entry, cancellationToken).ConfigureAwait(false);
-                            quickHash8 = _hasher.QuickHash8(hash);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.Warn($"quick hash failed path={relativePath}: {ex.Message}");
-                        }
+                        var hash = await _hasher.ComputeContextHashAsync(child, cancellationToken).ConfigureAwait(false);
+                        quickHash8 = _hasher.QuickHash8(hash);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warn($"scan hash failed path={relativePath}: {ex.Message}");
                     }
 
-                    item = new ScanItem
+                    entries.Add(new ScanItem
                     {
                         Path = relativePath,
                         Kind = "file",
                         Size = fileInfo.Length,
                         MtimeUtc = fileInfo.LastWriteTimeUtc,
                         QuickHash8 = quickHash8
-                    };
+                    });
                 }
 
-                items.Add(item);
-                if (items.Count >= limit)
+                if (entries.Count >= effectiveLimit)
                 {
                     truncated = true;
                     break;
                 }
-            }
-
-            if (truncated)
-            {
-                break;
             }
         }
 
         var data = new ScanData
         {
             Root = rootPath,
-            Items = items,
+            Entries = entries,
             Truncated = truncated
         };
 
