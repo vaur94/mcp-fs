@@ -122,8 +122,11 @@ public sealed class RipgrepRunner
             return null;
         }
 
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(options.TimeoutMs);
+        var opToken = timeoutCts.Token;
+
         var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-        var stopwatch = Stopwatch.StartNew();
 
         var matches = new List<SearchMatch>(Math.Min(options.MaxResults, 256));
         var matchedFiles = new HashSet<string>(StringComparer.Ordinal);
@@ -131,16 +134,18 @@ public sealed class RipgrepRunner
 
         while (true)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (stopwatch.ElapsedMilliseconds > options.TimeoutMs)
+            string? line;
+            try
+            {
+                line = await process.StandardOutput.ReadLineAsync(opToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 truncated = true;
                 KillSafely(process);
                 break;
             }
 
-            var line = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line is null)
             {
                 break;
@@ -178,7 +183,12 @@ public sealed class RipgrepRunner
 
         try
         {
-            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+            await process.WaitForExitAsync(opToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            truncated = true;
+            KillSafely(process);
         }
         catch
         {

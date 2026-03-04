@@ -62,7 +62,7 @@ public sealed class ScanTool
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
             {
-                _logger.Warn($"scan skip directory={current}: {ex.Message}");
+                _logger.Warn($"scan skip directory: {ex.Message}");
                 continue;
             }
 
@@ -128,7 +128,7 @@ public sealed class ScanTool
                     }
                     catch (Exception ex)
                     {
-                        _logger.Warn($"scan hash failed path={relativePath}: {ex.Message}");
+                        _logger.Warn($"scan hash failed: {ex.Message}");
                     }
 
                     entries.Add(new ScanItem

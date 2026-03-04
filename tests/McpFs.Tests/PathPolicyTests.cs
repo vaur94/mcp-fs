@@ -68,4 +68,24 @@ public sealed class PathPolicyTests
             TestHelpers.DeleteDirectory(root);
         }
     }
+
+    [Fact]
+    public void ResolvePath_WithWindowsStyleTraversal_ShouldReturnOutsideRoot()
+    {
+        var root = TestHelpers.CreateTempDirectory();
+        try
+        {
+            var workspace = TestHelpers.CreateWorkspace(root);
+
+            var ok = workspace.PathPolicy.TryResolvePath("a\\..\\..\\b", out _, out _, out var error);
+
+            ok.Should().BeFalse();
+            error.Should().NotBeNull();
+            error!.ErrorCode.Should().Be(ErrorCodes.OutsideRoot);
+        }
+        finally
+        {
+            TestHelpers.DeleteDirectory(root);
+        }
+    }
 }

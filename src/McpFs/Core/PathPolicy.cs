@@ -51,7 +51,10 @@ public sealed class PathPolicy
 
         try
         {
-            var combined = Path.Combine(_rootPath, trimmed.Replace('/', Path.DirectorySeparatorChar));
+            var normalizedInput = trimmed
+                .Replace('/', Path.DirectorySeparatorChar)
+                .Replace('\\', Path.DirectorySeparatorChar);
+            var combined = Path.Combine(_rootPath, normalizedInput);
             var normalized = Path.GetFullPath(combined);
             if (!IsWithinRoot(normalized))
             {

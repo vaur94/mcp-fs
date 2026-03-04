@@ -66,7 +66,7 @@ public sealed class FallbackSearcher
             }
             catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
             {
-                _logger.Warn($"search skip directory={currentDir}: {ex.Message}");
+                _logger.Warn($"search skip directory: {ex.Message}");
                 continue;
             }
 

@@ -19,7 +19,7 @@ var config = ConfigLoader.Load(args);
 var logger = new StderrLogger(config.LogLevel);
 var workspace = Workspace.Create(config, logger);
 
-logger.Info($"workspaceRoot={workspace.RootPath}");
+logger.Info("workspace initialized");
 logger.Info($"detectionReason={workspace.DetectionReason}");
 
 var hasher = new ContentHasher();

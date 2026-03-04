@@ -158,4 +158,43 @@ public sealed class SearchTests
             TestHelpers.DeleteDirectory(root);
         }
     }
+
+    [Fact]
+    public async Task RipgrepSearch_WithTinyTimeout_ShouldTruncate()
+    {
+        var root = TestHelpers.CreateTempDirectory();
+        try
+        {
+            var large = string.Join('\n', Enumerable.Repeat("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 300_000)) + "\n";
+            File.WriteAllText(Path.Combine(root, "big.txt"), large);
+
+            var workspace = TestHelpers.CreateWorkspace(root);
+            var logger = new StderrLogger("error");
+            var hasher = new ContentHasher();
+            var fallback = new FallbackSearcher(hasher, logger);
+            var ripgrep = new RipgrepRunner(logger, enabled: true);
+
+            if (!await ripgrep.IsAvailableAsync(CancellationToken.None))
+            {
+                return;
+            }
+
+            var tool = new SearchTool(workspace, ripgrep, fallback, hasher, logger);
+            var response = await tool.ExecuteAsync(new Rpc.SearchRequest
+            {
+                Query = "needle-not-present",
+                TimeoutMs = 1,
+                MaxResults = 10
+            }, CancellationToken.None);
+
+            response.Ok.Should().BeTrue();
+            var data = TestHelpers.DeserializeData<Rpc.SearchData>(response);
+            data.Engine.Should().Be("rg");
+            data.Truncated.Should().BeTrue();
+        }
+        finally
+        {
+            TestHelpers.DeleteDirectory(root);
+        }
+    }
 }
