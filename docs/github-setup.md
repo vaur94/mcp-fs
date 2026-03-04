@@ -5,10 +5,13 @@ Path: `Settings -> Branches` (or `Settings -> Rulesets`)
 
 Enable for `main`:
 - Require a pull request before merging
-- Require approvals: minimum 1
+- Require approvals:
+  - Autonomous bot flow: `0`
+  - Human review flow (optional stricter mode): `1+`
 - Require status checks to pass before merging
 - Required checks: CI workflow checks for all matrix platforms
 - Optionally dismiss stale approvals when new commits are pushed
+- Apply rules to administrators (disable admin bypass)
 - Block force pushes
 - Block branch deletion
 
@@ -51,5 +54,7 @@ Prefer matrix checks that represent all target platforms.
 ## 7) Release automation notes
 - `Release Please` workflow runs on `main` pushes and opens/updates release PRs.
 - Merging a release PR creates a release/tag and updates `CHANGELOG.md`.
-- The same workflow now builds and uploads release binaries plus `SHA256SUMS` automatically.
-- `.github/workflows/release.yml` remains as fallback/manual tag pipeline.
+- `.github/workflows/release.yml` publishes binaries and `SHA256SUMS` on:
+  - tag push (`v*`)
+  - release published event
+  - manual dispatch (`workflow_dispatch`) with `tag` input
