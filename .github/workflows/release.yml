@@ -64,7 +64,7 @@ jobs:
           (cd artifacts && zip -r ../dist/mcp-fs-${{ matrix.rid }}.zip ${{ matrix.rid }})
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mcp-fs-${{ matrix.rid }}
           path: dist/*
