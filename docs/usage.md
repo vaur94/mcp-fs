@@ -34,13 +34,66 @@ Default lookup order:
 
 Sample: [samples/mcp-fs.config.json.sample](../samples/mcp-fs.config.json.sample)
 
-## mcp-hub worker example
-Use [samples/workers/mcp-fs.worker.json](../samples/workers/mcp-fs.worker.json).
+## MCPHub integration (`vaur94/mcphub`)
+Reference: https://github.com/vaur94/mcphub
+
+Sample settings file: [samples/workers/mcp-fs.worker.json](../samples/workers/mcp-fs.worker.json)
+
+### Mode 1: Installed binary
+Use this server block in `mcp_settings.json`:
+```json
+{
+  "mcpServers": {
+    "mcp-fs": {
+      "type": "stdio",
+      "command": "/home/you/.local/bin/mcp-fs",
+      "args": [
+        "--config",
+        "/home/you/Projects/mcp-fs/samples/mcp-fs.config.json.sample"
+      ],
+      "env": {
+        "MCP_FS_ROOT": "/home/you/Projects"
+      }
+    }
+  }
+}
+```
+
+### Mode 2: Run from source (`dotnet run`)
+Use this server block in `mcp_settings.json`:
+```json
+{
+  "mcpServers": {
+    "mcp-fs-source": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "/home/you/Projects/mcp-fs/src/McpFs/McpFs.csproj",
+        "-c",
+        "Release",
+        "--",
+        "--config",
+        "/home/you/Projects/mcp-fs/samples/mcp-fs.config.json.sample"
+      ],
+      "env": {
+        "MCP_FS_ROOT": "/home/you/Projects"
+      }
+    }
+  }
+}
+```
 
 Important points:
-- Keep `toolPrefix` as `fs` to expose tools as `fs.*`.
-- Set `callToolMs` to at least search timeout hard cap (`15000`).
-- Do not enable verbose stdout logging in worker wrappers.
+- Use absolute paths for `command`, `args`, and `MCP_FS_ROOT`.
+- MCPHub stdio transport starts processes with `cwd` under home directory; relative paths can fail.
+- `MCP_FS_ROOT` defines the sandbox root seen by `mcp-fs`.
+
+Verification:
+1. Start MCPHub and open dashboard (`http://localhost:3000`).
+2. Confirm server status is `connected`.
+3. Confirm tools list includes `fs.capabilities`, `fs.open`, `fs.patch`, and other `fs.*` tools.
 
 ## Minimal MCP flow
 1. `initialize`

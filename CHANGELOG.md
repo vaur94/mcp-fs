@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * initial mcp-fs v0.1.0 ([a07dec0](https://github.com/vaur94/mcp-fs/commit/a07dec0eee6fc04d6d558fce79f1d53aaf4e10e0))
 
 ## [Unreleased]
+### Changed
+- Replaced legacy hub wording with MCPHub (`vaur94/mcphub`) in docs.
+- Added MCPHub startup guidance for both installed binary and `dotnet run` modes.
+- Converted `samples/workers/mcp-fs.worker.json` to MCPHub `mcp_settings.json` format.
 
 ## [1.0.0] - 2026-03-04
 ### Added
@@ -23,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - EOL normalization and UTF-8 BOM preservation in patch pipeline.
 - Root detection reason normalization: `env|config|git|sln|node|python|cwd`.
 - New normative security document (`docs/security.md`).
-- mcp-hub worker sample and v1 config sample.
+- MCPHub worker sample and v1 config sample.
 
 ### Changed
 - Version bumped to `1.0.0`.
