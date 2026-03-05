@@ -1,13 +1,33 @@
 {
-  "name": "mcp-fs",
-  "toolPrefix": "fs",
-  "command": "./mcp-fs",
-  "args": [
-    "--config",
-    "./mcp-fs.config.json"
-  ],
-  "env": {
-    "MCP_FS_ROOT": "."
-  },
-  "callToolMs": 15000
+  "mcpServers": {
+    "mcp-fs": {
+      "type": "stdio",
+      "command": "/home/you/.local/bin/mcp-fs",
+      "args": [
+        "--config",
+        "/home/you/Projects/mcp-fs/samples/mcp-fs.config.json.sample"
+      ],
+      "env": {
+        "MCP_FS_ROOT": "/home/you/Projects"
+      }
+    },
+    "mcp-fs-source": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": [
+        "run",
+        "--project",
+        "/home/you/Projects/mcp-fs/src/McpFs/McpFs.csproj",
+        "-c",
+        "Release",
+        "--",
+        "--config",
+        "/home/you/Projects/mcp-fs/samples/mcp-fs.config.json.sample"
+      ],
+      "env": {
+        "MCP_FS_ROOT": "/home/you/Projects"
+      },
+      "enabled": false
+    }
+  }
 }

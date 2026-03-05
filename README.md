@@ -35,9 +35,14 @@ dotnet build -c Release
 dotnet run --project src/McpFs/McpFs.csproj -c Release -- --config ./mcp-fs.config.json
 ```
 
-### Config and worker samples
+### Config and MCPHub samples
 - Config sample: [samples/mcp-fs.config.json.sample](samples/mcp-fs.config.json.sample)
-- mcp-hub worker sample: [samples/workers/mcp-fs.worker.json](samples/workers/mcp-fs.worker.json)
+- MCPHub settings sample (`mcp_settings.json` format): [samples/workers/mcp-fs.worker.json](samples/workers/mcp-fs.worker.json)
+
+### MCPHub (vaur94/mcphub) integration notes
+- Prefer absolute paths for `command`, `args`, and `env` values.
+- Set `MCP_FS_ROOT` to the workspace directory you want `mcp-fs` to sandbox.
+- MCPHub repository: [vaur94/mcphub](https://github.com/vaur94/mcphub)
 
 ### Docs
 - Protocol (normative): [docs/protocol.md](docs/protocol.md)
@@ -96,7 +101,12 @@ dotnet run --project src/McpFs/McpFs.csproj -c Release -- --config ./mcp-fs.conf
 
 ### Örnek dosyalar
 - Config: [samples/mcp-fs.config.json.sample](samples/mcp-fs.config.json.sample)
-- mcp-hub worker: [samples/workers/mcp-fs.worker.json](samples/workers/mcp-fs.worker.json)
+- MCPHub ayar örneği (`mcp_settings.json` formatı): [samples/workers/mcp-fs.worker.json](samples/workers/mcp-fs.worker.json)
+
+### MCPHub (vaur94/mcphub) entegrasyon notları
+- `command`, `args` ve `env` değerlerinde mutlak path kullanın.
+- `MCP_FS_ROOT` ile `mcp-fs` çalışma alanı sınırını belirleyin.
+- MCPHub deposu: [vaur94/mcphub](https://github.com/vaur94/mcphub)
 
 ### Dokümanlar
 - Protokol (normatif): [docs/protocol.md](docs/protocol.md)

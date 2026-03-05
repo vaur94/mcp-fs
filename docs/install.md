@@ -43,13 +43,40 @@ Use local release assets instead of downloading from GitHub:
 ./install.sh --local-release-dir ./artifacts/release-local --prefix ./tmp-bin
 ```
 
-### mcp-hub worker wiring
-Use [samples/workers/mcp-fs.worker.json](../samples/workers/mcp-fs.worker.json) and set command path to the installed binary:
+### MCPHub wiring (`vaur94/mcphub`)
+MCPHub repository: https://github.com/vaur94/mcphub
+
+Use [samples/workers/mcp-fs.worker.json](../samples/workers/mcp-fs.worker.json) as `mcp_settings.json`.
+
+Startup matrix:
+
+| Mode | `command` | `args` |
+| --- | --- | --- |
+| Installed binary | `/home/you/.local/bin/mcp-fs` | `["--config","/home/you/Projects/mcp-fs/samples/mcp-fs.config.json.sample"]` |
+| Source (`dotnet run`) | `dotnet` | `["run","--project","/home/you/Projects/mcp-fs/src/McpFs/McpFs.csproj","-c","Release","--","--config","/home/you/Projects/mcp-fs/samples/mcp-fs.config.json.sample"]` |
+
+Recommended `mcp_settings.json` block:
 ```json
 {
-  "command": "/home/you/.local/bin/mcp-fs"
+  "mcpServers": {
+    "mcp-fs": {
+      "type": "stdio",
+      "command": "/home/you/.local/bin/mcp-fs",
+      "args": [
+        "--config",
+        "/home/you/Projects/mcp-fs/samples/mcp-fs.config.json.sample"
+      ],
+      "env": {
+        "MCP_FS_ROOT": "/home/you/Projects"
+      }
+    }
+  }
 }
 ```
+
+Notes:
+- Use absolute paths for `command`, `args`, and `MCP_FS_ROOT`.
+- `MCP_FS_ROOT` sets the workspace sandbox boundary for `mcp-fs`.
 
 ## Türkçe (TR)
 
@@ -94,10 +121,37 @@ GitHub yerine local release asset kullanımı:
 ./install.sh --local-release-dir ./artifacts/release-local --prefix ./tmp-bin
 ```
 
-### mcp-hub worker bağlantısı
-[samples/workers/mcp-fs.worker.json](../samples/workers/mcp-fs.worker.json) kullanın ve `command` yolunu kurulan binary’ye yöneltin:
+### MCPHub bağlantısı (`vaur94/mcphub`)
+MCPHub deposu: https://github.com/vaur94/mcphub
+
+[samples/workers/mcp-fs.worker.json](../samples/workers/mcp-fs.worker.json) dosyasını `mcp_settings.json` örneği olarak kullanın.
+
+Başlatma matrisi:
+
+| Mod | `command` | `args` |
+| --- | --- | --- |
+| Kurulu binary | `/home/you/.local/bin/mcp-fs` | `["--config","/home/you/Projects/mcp-fs/samples/mcp-fs.config.json.sample"]` |
+| Kaynaktan (`dotnet run`) | `dotnet` | `["run","--project","/home/you/Projects/mcp-fs/src/McpFs/McpFs.csproj","-c","Release","--","--config","/home/you/Projects/mcp-fs/samples/mcp-fs.config.json.sample"]` |
+
+Önerilen `mcp_settings.json` bloğu:
 ```json
 {
-  "command": "/home/you/.local/bin/mcp-fs"
+  "mcpServers": {
+    "mcp-fs": {
+      "type": "stdio",
+      "command": "/home/you/.local/bin/mcp-fs",
+      "args": [
+        "--config",
+        "/home/you/Projects/mcp-fs/samples/mcp-fs.config.json.sample"
+      ],
+      "env": {
+        "MCP_FS_ROOT": "/home/you/Projects"
+      }
+    }
+  }
 }
 ```
+
+Notlar:
+- `command`, `args` ve `MCP_FS_ROOT` için mutlak path kullanın.
+- `MCP_FS_ROOT`, `mcp-fs` için workspace sandbox sınırını belirler.
